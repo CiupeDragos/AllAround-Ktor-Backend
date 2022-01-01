@@ -6,6 +6,7 @@ import com.example.data.saveNormalChatMessage
 import com.example.requests.JoinChatRequest
 import com.example.requests.JoinGroupRequest
 import com.example.requests.JoinMyChatsRequest
+import com.example.responses.ConnectedToSocket
 import com.example.server.*
 import com.example.util.Constants.TYPE_CHAT_GROUP_MESSAGE
 import com.example.util.Constants.TYPE_JOIN_CHAT_REQUEST
@@ -27,7 +28,7 @@ fun Route.connectToChat() {
             when(parsedJson) {
                 is JoinMyChatsRequest -> {
                     if(!addNotChattingUser(parsedJson.username, socket)) {
-                        socket.close(CloseReason(CloseReason.Codes.PROTOCOL_ERROR, "Already online as a not chatting user"))
+                        //socket.close(CloseReason(CloseReason.Codes.PROTOCOL_ERROR, "Already online as a not chatting user"))
                         return@standardWebSocket
                     } else {
                         println("${parsedJson.username} join the recent chats")
@@ -38,13 +39,12 @@ fun Route.connectToChat() {
                 }
                 is JoinChatRequest -> {
                     if(!addNormalChatUser(parsedJson.username, socket, parsedJson.chatPartner)) {
-                        socket.close(CloseReason(CloseReason.Codes.PROTOCOL_ERROR, "Already online as a chat user"))
+                        //socket.close(CloseReason(CloseReason.Codes.PROTOCOL_ERROR, "Already online as a chat user"))
                         return@standardWebSocket
                     } else {
                         val messagesForThisChat = getAllChatMessages(parsedJson.username, parsedJson.chatPartner)
                         socket.send(Frame.Text(messagesForThisChat))
                         tryDisconnectUnchattingUser(parsedJson.username)
-                        addLastReadTimestampForChat(parsedJson.username, parsedJson.chatPartner)
                     }
                 }
                 is JoinGroupRequest -> {
@@ -55,7 +55,6 @@ fun Route.connectToChat() {
                         val messagesForThisChatGroup = getAllChatGroupMessages(parsedJson.groupId)
                         socket.send(Frame.Text(messagesForThisChatGroup))
                         tryDisconnectUnchattingUser(parsedJson.username)
-                        addLastReadTimestampForGroup(parsedJson.username, parsedJson.groupId)
                     }
                 }
                 is NormalChatMessage -> {
@@ -85,7 +84,9 @@ fun Route.standardWebSocket(
             close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, "No session"))
             return@webSocket
         }
-
+        //send connected event for client side socket reconnect bug
+        this.send(Frame.Text(gson.toJson(ConnectedToSocket())))
+        println("sent connected to socket to ${session.username}")
         try {
             incoming.consumeEach { frame ->
                 if(frame is Frame.Text) {

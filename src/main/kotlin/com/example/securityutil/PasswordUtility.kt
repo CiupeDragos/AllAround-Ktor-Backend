@@ -1,4 +1,4 @@
-package com.example.Security
+package com.example.securityutil
 
 import org.apache.commons.codec.binary.Hex
 import org.apache.commons.codec.digest.DigestUtils

@@ -1,5 +1,6 @@
-package com.example.data.models
+package com.example.responses
 
+import com.example.data.models.BaseModel
 import com.example.util.Constants.TYPE_RECENT_CHATS
 
 data class MessagesToSendAsRecent(

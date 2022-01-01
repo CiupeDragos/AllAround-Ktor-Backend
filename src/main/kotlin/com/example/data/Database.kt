@@ -1,8 +1,9 @@
 package com.example.data
 
-import com.example.Security.checkHashForPassword
-import com.example.Security.getHashWithSalt
+
 import com.example.data.models.*
+import com.example.securityutil.checkHashForPassword
+import com.example.securityutil.getHashWithSalt
 import com.example.server.findChat
 import com.example.server.insertChatMessageToChat
 import com.example.util.Constants.MAX_CHAT_GROUP_NAME_LENGTH
@@ -19,7 +20,7 @@ import org.litote.kmongo.reactivestreams.KMongo
 val client = KMongo.createClient().coroutine
 val database = client.getDatabase("AllAroundDatabase")
 
-val users = database.getCollection<User>("user")
+val users = database.getCollection<User>("users")
 val chatGroups = database.getCollection<ChatGroup>("chat_groups")
 val normalChatMessages = database.getCollection<NormalChatMessage>("normal_chat_messages")
 val chatGroupMessages = database.getCollection<ChatGroupMessage>("chat_group_messages")

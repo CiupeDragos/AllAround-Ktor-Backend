@@ -2,10 +2,10 @@ package com.example.server
 
 import com.example.data.*
 import com.example.data.models.*
+import com.example.responses.*
 import com.google.gson.Gson
 import io.ktor.http.cio.websocket.*
 import org.bson.types.ObjectId
-import org.litote.kmongo.MongoOperator
 import org.litote.kmongo.contains
 import org.litote.kmongo.eq
 import java.util.concurrent.ConcurrentHashMap
@@ -18,23 +18,28 @@ val onlineNotChattingUsers = ConcurrentHashMap<String, UnchattingUser>()
 
 suspend fun tryDisconnect(username: String) {
     if (onlineGroupUsers.containsKey(username)) {
+        addLastReadTimestampForGroup(username, onlineGroupUsers[username]!!.groupId)
         onlineGroupUsers[username]!!.socket.close(CloseReason(CloseReason.Codes.NORMAL, "Socket closed"))
         onlineGroupUsers.remove(username)
     } else if (onlineChatUsers.containsKey(username)) {
+        addLastReadTimestampForChat(username, onlineChatUsers[username]!!.chatPartner)
         onlineChatUsers[username]!!.socket.close(CloseReason(CloseReason.Codes.NORMAL, "Socket closed"))
         onlineChatUsers.remove(username)
     } else {
         if (onlineNotChattingUsers.containsKey(username)) {
             onlineNotChattingUsers[username]!!.socket.close(CloseReason(CloseReason.Codes.NORMAL, "Socket closed"))
             onlineNotChattingUsers.remove(username)
+            println("$username disconnected from recent chats")
         }
     }
 }
 
-fun tryDisconnectChattingUsers(username: String) {
+suspend fun tryDisconnectChattingUsers(username: String) {
     if (onlineGroupUsers.containsKey(username)) {
+        addLastReadTimestampForGroup(username, onlineGroupUsers[username]!!.groupId)
         onlineGroupUsers.remove(username)
     } else if (onlineChatUsers.containsKey(username)) {
+        addLastReadTimestampForChat(username, onlineChatUsers[username]!!.chatPartner)
         onlineChatUsers.remove(username)
     }
 }
@@ -202,8 +207,33 @@ suspend fun getAllRecentChatsForUser(username: String): String {
             chat.participant1
         }
         val lastReadForThisChat = lastReadTimestampsForChats.filter { it.contains("${chat.chatId}:") }[0].split(":")[1]
-        val newMessages = chat.lastMessageTimestamp!! > lastReadForThisChat.toLong()
-        val chatAsRecentChat = ChatToSendAsRecent(chattingTo, newMessages, chat.lastMessageTimestamp!!)
+        var newMessages = 0
+        var lastMessage = ""
+        var lastMessageSender = ""
+        val messagesFromMessageIdList = chat.messages.map { messageId ->
+            normalChatMessages.findOneById(messageId)!!
+        }
+        if(messagesFromMessageIdList.isNotEmpty()) {
+            lastMessage = messagesFromMessageIdList.last().message
+            lastMessageSender = messagesFromMessageIdList.last().sender
+        } else {
+            lastMessage = "No message"
+            lastMessageSender = "No message"
+        }
+        for (message in messagesFromMessageIdList.reversed()) {
+            if(message.timestamp > lastReadForThisChat.toLong()) {
+                newMessages++
+            } else {
+                break
+            }
+        }
+        val chatAsRecentChat = ChatToSendAsRecent(
+            chattingTo,
+            newMessages,
+            lastMessage,
+            lastMessageSender,
+            chat.lastMessageTimestamp!!
+        )
         chatsAsRecentChats.add(chatAsRecentChat)
     }
     val chatsToSend = chatsAsRecentChats.toList()
@@ -215,8 +245,32 @@ suspend fun getAllRecentChatsForUser(username: String): String {
         val name = curGroup.name
         val groupId = curGroup.groupId
         val lastReadForThisGroup = lastReadTimestampsForGroups.filter { it.contains("${curGroup.groupId}:") }[0].split(":")[1]
-        val newMessages = curGroup.lastMessageTimestamp!! > lastReadForThisGroup.toLong()
-        val groupAsRecentGroup = GroupToSendAsRecent(name, groupId, newMessages, curGroup.lastMessageTimestamp!!)
+        var newMessages = 0
+        var lastMessage = ""
+        var lastMessageSender = ""
+        val messagesForThisGroup = chatGroupMessages.find(ChatGroup::groupId eq groupId).toList()
+        if(messagesForThisGroup.isNotEmpty()) {
+            lastMessage = messagesForThisGroup.last().message
+            lastMessageSender = messagesForThisGroup.last().sender
+        } else {
+            lastMessage = "No message"
+            lastMessageSender = "No message"
+        }
+        for (message in messagesForThisGroup.reversed()) {
+            if(message.timestamp > lastReadForThisGroup.toLong()) {
+                newMessages++
+            } else {
+                break
+            }
+        }
+        val groupAsRecentGroup = GroupToSendAsRecent(
+            name,
+            groupId,
+            newMessages,
+            lastMessage,
+            lastMessageSender,
+            curGroup.lastMessageTimestamp!!
+        )
         groupsAsRecentGroups.add(groupAsRecentGroup)
     }
     val groupsToSend = groupsAsRecentGroups.toList()
