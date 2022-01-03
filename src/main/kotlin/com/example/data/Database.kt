@@ -20,7 +20,7 @@ import org.litote.kmongo.reactivestreams.KMongo
 val client = KMongo.createClient().coroutine
 val database = client.getDatabase("AllAroundDatabase")
 
-val users = database.getCollection<User>("users")
+val users = database.getCollection<User>("user")
 val chatGroups = database.getCollection<ChatGroup>("chat_groups")
 val normalChatMessages = database.getCollection<NormalChatMessage>("normal_chat_messages")
 val chatGroupMessages = database.getCollection<ChatGroupMessage>("chat_group_messages")

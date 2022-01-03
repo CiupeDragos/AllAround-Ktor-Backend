@@ -25,6 +25,7 @@ suspend fun tryDisconnect(username: String) {
         addLastReadTimestampForChat(username, onlineChatUsers[username]!!.chatPartner)
         onlineChatUsers[username]!!.socket.close(CloseReason(CloseReason.Codes.NORMAL, "Socket closed"))
         onlineChatUsers.remove(username)
+        println("$username disconnected this chat")
     } else {
         if (onlineNotChattingUsers.containsKey(username)) {
             onlineNotChattingUsers[username]!!.socket.close(CloseReason(CloseReason.Codes.NORMAL, "Socket closed"))
@@ -142,6 +143,10 @@ suspend fun broadcastNormalChatMessage(message: String, messageSender: String, m
 
     if (receiver != null && receiver.chatPartner == messageSender) {
         receiver.socket.send(Frame.Text(message))
+    } else {
+        if(onlineNotChattingUsers.containsKey(messageReceiver)) {
+            onlineNotChattingUsers[messageReceiver]!!.socket.send(Frame.Text(getAllRecentChatsForUser(messageReceiver)))
+        }
     }
 }
 
@@ -149,6 +154,12 @@ suspend fun broadcastChatGroupMessage(message: String, groupId: String) {
     onlineGroupUsers.values.forEach { groupUser ->
         if (groupUser.groupId == groupId) {
             groupUser.socket.send(Frame.Text(message))
+        }
+    }
+    val groupMembers = (chatGroups.findOneById(groupId) ?: return).members
+    onlineNotChattingUsers.values.forEach { user ->
+        if(user.username in groupMembers) {
+            user.socket.send(Frame.Text(getAllRecentChatsForUser(user.username)))
         }
     }
 }
@@ -248,7 +259,7 @@ suspend fun getAllRecentChatsForUser(username: String): String {
         var newMessages = 0
         var lastMessage = ""
         var lastMessageSender = ""
-        val messagesForThisGroup = chatGroupMessages.find(ChatGroup::groupId eq groupId).toList()
+        val messagesForThisGroup = chatGroupMessages.find(ChatGroupMessage::groupId eq groupId).toList()
         if(messagesForThisGroup.isNotEmpty()) {
             lastMessage = messagesForThisGroup.last().message
             lastMessageSender = messagesForThisGroup.last().sender

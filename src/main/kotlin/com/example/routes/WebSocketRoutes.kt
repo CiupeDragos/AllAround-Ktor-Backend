@@ -31,7 +31,7 @@ fun Route.connectToChat() {
                         //socket.close(CloseReason(CloseReason.Codes.PROTOCOL_ERROR, "Already online as a not chatting user"))
                         return@standardWebSocket
                     } else {
-                        println("${parsedJson.username} join the recent chats")
+                        println("${parsedJson.username} joined the recent chats")
                         tryDisconnectChattingUsers(parsedJson.username)
                         val messages = getAllRecentChatsForUser(parsedJson.username)
                         socket.send(Frame.Text(messages))
@@ -42,6 +42,7 @@ fun Route.connectToChat() {
                         //socket.close(CloseReason(CloseReason.Codes.PROTOCOL_ERROR, "Already online as a chat user"))
                         return@standardWebSocket
                     } else {
+                        println("${parsedJson.username} joined the chat with ${parsedJson.chatPartner}")
                         val messagesForThisChat = getAllChatMessages(parsedJson.username, parsedJson.chatPartner)
                         socket.send(Frame.Text(messagesForThisChat))
                         tryDisconnectUnchattingUser(parsedJson.username)
@@ -60,6 +61,7 @@ fun Route.connectToChat() {
                 is NormalChatMessage -> {
                     saveNormalChatMessage(parsedJson)
                     broadcastNormalChatMessage(unparsedJson, parsedJson.sender, parsedJson.receiver)
+
                 }
                 is ChatGroupMessage -> {
                     saveChatGroupMessage(parsedJson)
