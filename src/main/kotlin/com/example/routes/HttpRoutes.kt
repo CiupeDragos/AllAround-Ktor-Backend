@@ -2,6 +2,7 @@ package com.example.routes
 
 import com.example.data.*
 import com.example.data.models.ChatSession
+import com.example.data.models.User
 import com.example.requests.AccountRequest
 import com.example.requests.CreateGroupRequest
 import com.example.responses.BasicApiResponse
@@ -15,6 +16,7 @@ import io.ktor.request.*
 import io.ktor.response.*
 import io.ktor.routing.*
 import io.ktor.sessions.*
+import org.litote.kmongo.eq
 
 fun Route.registerRoute() {
     route("/registerAccount") {
@@ -58,6 +60,49 @@ fun Route.loginRoute() {
         } else {
             call.respond(OK, BasicApiResponse(false, "Username or password do not match"))
         }
+    }
+}
+
+fun Route.findUsers() {
+    get("/findUsers") {
+        val session = call.sessions.get<ChatSession>()
+        if(session == null) {
+            call.respond(BadRequest, "No session")
+            return@get
+        }
+        val username = call.parameters["username"]
+        if(username == null) {
+            call.respond(BadRequest, "Username search query not provided")
+            return@get
+        }
+        //Should modify to search all the users whose usernames contain the search query
+        val users = users.find(User::username eq username).toList()
+        if(users.isEmpty()) {
+            call.respond(BadRequest, "No users found")
+        } else {
+            val userList = users.map {
+                it.username
+            }
+            call.respond(OK, userList)
+        }
+    }
+}
+
+fun Route.findFriends() {
+    get("/findFriends") {
+        val session = call.sessions.get<ChatSession>()
+        if(session == null) {
+            call.respond(BadRequest, "No session")
+            return@get
+        }
+        val username = session.username
+        val user = users.findOne(User::username eq username)
+        if(user == null) {
+            call.respond(BadRequest, "User does not exist")
+            return@get
+        }
+        val friends = user.friends
+        call.respond(OK, friends)
     }
 }
 
