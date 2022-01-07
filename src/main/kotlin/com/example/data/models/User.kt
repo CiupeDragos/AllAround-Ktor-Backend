@@ -9,6 +9,8 @@ data class User(
     val friends: List<String>,
     val lastReadForGroups: List<String> = listOf(),
     val lastReadForChats: List<String> = listOf(),
+    val sentFriends: List<String> = listOf(),
+    val receivedFriends: List<String> = listOf(),
     @BsonId
     val userId: String = ObjectId().toString()
 )

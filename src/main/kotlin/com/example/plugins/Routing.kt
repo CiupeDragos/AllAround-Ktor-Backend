@@ -12,5 +12,10 @@ fun Application.configureRouting() {
         connectToChat()
         findFriends()
         findUsers()
+        getFriendRequests()
+        sendFriendRequest()
+        cancelFriendRequest()
+        refuseFriendRequest()
+        acceptFriendRequest()
     }
 }

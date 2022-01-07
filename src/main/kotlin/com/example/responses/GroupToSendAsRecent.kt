@@ -7,5 +7,6 @@ data class GroupToSendAsRecent(
     val lastMessage: String,
     val lastMessageSender: String,
     val lastMessageTimestamp: Long,
+    val owner: String,
     val typeOfChat: String = "TYPE_GROUP"
 )

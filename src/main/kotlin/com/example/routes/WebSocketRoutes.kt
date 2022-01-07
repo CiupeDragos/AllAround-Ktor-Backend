@@ -3,12 +3,14 @@ package com.example.routes
 import com.example.data.models.*
 import com.example.data.saveChatGroupMessage
 import com.example.data.saveNormalChatMessage
+import com.example.requests.DisconnectUnchattingUser
 import com.example.requests.JoinChatRequest
 import com.example.requests.JoinGroupRequest
 import com.example.requests.JoinMyChatsRequest
 import com.example.responses.ConnectedToSocket
 import com.example.server.*
 import com.example.util.Constants.TYPE_CHAT_GROUP_MESSAGE
+import com.example.util.Constants.TYPE_DISCONNECT_UNCHATTING_USER
 import com.example.util.Constants.TYPE_JOIN_CHAT_REQUEST
 import com.example.util.Constants.TYPE_JOIN_GROUP_REQUEST
 import com.example.util.Constants.TYPE_JOIN_MY_CHATS_REQUEST
@@ -67,6 +69,9 @@ fun Route.connectToChat() {
                     saveChatGroupMessage(parsedJson)
                     broadcastChatGroupMessage(unparsedJson, parsedJson.groupId)
                 }
+                is DisconnectUnchattingUser -> {
+                    disconnectUnchattingUser(parsedJson.username)
+                }
             }
         }
     }
@@ -100,6 +105,7 @@ fun Route.standardWebSocket(
                         TYPE_NORMAL_CHAT_MESSAGE -> NormalChatMessage::class.java
                         TYPE_CHAT_GROUP_MESSAGE -> ChatGroupMessage::class.java
                         TYPE_JOIN_MY_CHATS_REQUEST -> JoinMyChatsRequest::class.java
+                        TYPE_DISCONNECT_UNCHATTING_USER -> DisconnectUnchattingUser::class.java
                         else -> BaseModel::class.java
                     }
                     val parsedJsonMessage = gson.fromJson(unparsedString, type)
