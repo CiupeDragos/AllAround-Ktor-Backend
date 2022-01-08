@@ -75,7 +75,7 @@ fun Route.findUsers() {
             call.respond(BadRequest, "Username search query not provided")
             return@get
         }
-        //Should modify to search all the users whose usernames contain the search query
+        //Should modify to search for all the users whose usernames contain the search query
         val users = users.find(User::username eq username).toList()
         if(users.isEmpty()) {
             call.respond(BadRequest, "No users found")
