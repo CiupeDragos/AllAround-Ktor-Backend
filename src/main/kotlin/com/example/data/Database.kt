@@ -5,13 +5,17 @@ import com.example.data.models.*
 import com.example.securityutil.checkHashForPassword
 import com.example.securityutil.getHashWithSalt
 import com.example.server.findChat
+import com.example.server.getAllRecentChatsForUser
 import com.example.server.insertChatMessageToChat
+import com.example.server.onlineNotChattingUsers
 import com.example.util.Constants.MAX_CHAT_GROUP_NAME_LENGTH
 import com.example.util.Constants.MAX_PASSWORD_LENGTH
 import com.example.util.Constants.MAX_USERNAME_LENGTH
 import com.example.util.Constants.MIN_CHAT_GROUP_NAME_LENGTH
 import com.example.util.Constants.MIN_PASSWORD_LENGTH
 import com.example.util.Constants.MIN_USERNAME_LENGTH
+import com.example.util.Constants.NO_GROUP_ID
+import io.ktor.http.cio.websocket.*
 import org.bson.types.ObjectId
 import org.litote.kmongo.coroutine.coroutine
 import org.litote.kmongo.eq
@@ -20,7 +24,7 @@ import org.litote.kmongo.reactivestreams.KMongo
 val client = KMongo.createClient().coroutine
 val database = client.getDatabase("AllAroundDatabase")
 
-val users = database.getCollection<User>("user")
+val users = database.getCollection<User>("users")
 val chatGroups = database.getCollection<ChatGroup>("chat_groups")
 val normalChatMessages = database.getCollection<NormalChatMessage>("normal_chat_messages")
 val chatGroupMessages = database.getCollection<ChatGroupMessage>("chat_group_messages")
@@ -59,19 +63,32 @@ suspend fun hasGroupWithThatName(username: String, groupName: String): Boolean {
     return ownedGroups.filter { it.name == groupName }.isNotEmpty()
 }
 
-suspend fun validateAndCreateChatGroup(username: String, name: String, members: List<String>): Boolean {
+suspend fun validateAndCreateChatGroup(username: String, name: String, members: List<String>): String {
 
     if(name.length < MIN_CHAT_GROUP_NAME_LENGTH || name.length > MAX_CHAT_GROUP_NAME_LENGTH) {
-        return false
+        return NO_GROUP_ID
     }
 
     val chatGroup = ChatGroup(
         name,
         username,
         listOf(username),
-        members
+        members,
+        System.currentTimeMillis()
     )
-    return chatGroups.insertOne(chatGroup).wasAcknowledged()
+    chatGroups.insertOne(chatGroup)
+    for (member in members) {
+        val curUser = users.findOne(User::username eq member)!!
+        val userLastReadForGroups = curUser.lastReadForGroups.toMutableList()
+        userLastReadForGroups += "${chatGroup.groupId}:${System.currentTimeMillis()}"
+        val updatedUser = curUser.copy(lastReadForGroups = userLastReadForGroups.toList())
+        users.replaceOne(User::userId eq curUser.userId, updatedUser)
+        if(onlineNotChattingUsers.containsKey(member)) {
+            onlineNotChattingUsers[member]!!.socket.send(Frame.Text(getAllRecentChatsForUser(member)))
+        }
+    }
+
+    return "${chatGroup.groupId},${chatGroup.name}"
 }
 
 suspend fun saveNormalChatMessage(message: NormalChatMessage) {

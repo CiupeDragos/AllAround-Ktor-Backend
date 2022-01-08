@@ -254,6 +254,7 @@ suspend fun getAllRecentChatsForUser(username: String): String {
     val groupsAsRecentGroups = mutableListOf<GroupToSendAsRecent>()
     groupsForUser.forEach { curGroup ->
         val name = curGroup.name
+        val owner = curGroup.owner
         val groupId = curGroup.groupId
         val lastReadForThisGroup = lastReadTimestampsForGroups.filter { it.contains("${curGroup.groupId}:") }[0].split(":")[1]
         var newMessages = 0
@@ -280,7 +281,8 @@ suspend fun getAllRecentChatsForUser(username: String): String {
             newMessages,
             lastMessage,
             lastMessageSender,
-            curGroup.lastMessageTimestamp!!
+            curGroup.lastMessageTimestamp!!,
+            owner
         )
         groupsAsRecentGroups.add(groupAsRecentGroup)
     }
@@ -289,4 +291,10 @@ suspend fun getAllRecentChatsForUser(username: String): String {
     val messagesToSendAsRecent = MessagesToSendAsRecent(chatsToSend, groupsToSend)
 
     return gson.toJson(messagesToSendAsRecent)
+}
+
+fun disconnectUnchattingUser(username: String) {
+    if(onlineNotChattingUsers.containsKey(username)) {
+        onlineNotChattingUsers.remove(username)
+    }
 }

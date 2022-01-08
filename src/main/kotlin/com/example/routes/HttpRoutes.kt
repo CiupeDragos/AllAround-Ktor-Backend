@@ -6,17 +6,23 @@ import com.example.data.models.User
 import com.example.requests.AccountRequest
 import com.example.requests.CreateGroupRequest
 import com.example.responses.BasicApiResponse
+import com.example.responses.FriendRequestsResponse
+import com.example.server.gson
 import com.example.util.Constants.MAX_CHAT_GROUP_NAME_LENGTH
 import com.example.util.Constants.MIN_CHAT_GROUP_NAME_LENGTH
+import com.example.util.Constants.NO_GROUP_ID
 import io.ktor.application.*
+import io.ktor.http.*
 import io.ktor.http.HttpStatusCode.Companion.BadRequest
 import io.ktor.http.HttpStatusCode.Companion.Conflict
+import io.ktor.http.HttpStatusCode.Companion.NoContent
 import io.ktor.http.HttpStatusCode.Companion.OK
 import io.ktor.request.*
 import io.ktor.response.*
 import io.ktor.routing.*
 import io.ktor.sessions.*
 import org.litote.kmongo.eq
+import java.security.BasicPermission
 
 fun Route.registerRoute() {
     route("/registerAccount") {
@@ -70,7 +76,7 @@ fun Route.findUsers() {
             call.respond(BadRequest, "No session")
             return@get
         }
-        val username = call.parameters["username"]
+        val username = call.parameters["usernameToSearch"]
         if(username == null) {
             call.respond(BadRequest, "Username search query not provided")
             return@get
@@ -124,15 +130,16 @@ fun Route.createChatGroup() {
             return@post
         }
         if(!checkIfUserExists(session.username)){
-            call.respond(Conflict, BasicApiResponse(false, "No account with the session's username exists"))
+            call.respond(OK, BasicApiResponse(false, "No account with the session's username exists"))
             return@post
         }
         if(hasGroupWithThatName(session.username, chatGroupRequest.name)) {
-            call.respond(Conflict, BasicApiResponse(false, "There's already a chat group with this name owned by ${session.username}"))
+            call.respond(OK, BasicApiResponse(false, "There's already a chat group with this name owned by ${session.username}"))
             return@post
         }
-        if(validateAndCreateChatGroup(session.username, chatGroupRequest.name, chatGroupRequest.members)) {
-            call.respond(OK, BasicApiResponse(true, "Chat group '${chatGroupRequest.name}' created successfully"))
+        val createGroupCall = validateAndCreateChatGroup(session.username, chatGroupRequest.name, chatGroupRequest.members)
+        if(createGroupCall != NO_GROUP_ID) {
+            call.respond(OK, BasicApiResponse(true, createGroupCall))
         } else {
             call.respond(
                 OK,
@@ -142,5 +149,192 @@ fun Route.createChatGroup() {
                 )
             )
         }
+    }
+}
+
+fun Route.getFriendRequests() {
+    get("/getFriendRequests") {
+        val session = call.sessions.get<ChatSession>()
+        val username = session?.username
+        if(session ==  null) {
+            call.respond(BadRequest, "No session")
+            return@get
+        }
+        val user = users.findOne(User::username eq username)
+        if(user == null) {
+            call.respond(BadRequest, "No user with this username exists")
+            return@get
+        }
+        if(user.sentFriends.isEmpty() && user.receivedFriends.isEmpty()) {
+            call.respond(BadRequest, "No requests")
+            return@get
+        }
+        val sentFriendRequest = user.sentFriends
+        val receivedFriendRequests = user.receivedFriends
+        val response = FriendRequestsResponse(sentFriendRequest, receivedFriendRequests)
+        call.respond(OK, response)
+    }
+}
+
+fun Route.sendFriendRequest() {
+    post("/sendFriendRequest") {
+        val session = call.sessions.get<ChatSession>()
+        val username = session?.username
+        val sentToUsername = call.parameters["sentToUsername"]
+        if(session ==  null) {
+            call.respond(BadRequest, "No session")
+            return@post
+        }
+        val user = users.findOne(User::username eq username)
+        if(user == null) {
+            call.respond(BadRequest, "No user with this username exists")
+            return@post
+        }
+        if(sentToUsername == null) {
+            call.respond(BadRequest, "No user with this username exists")
+            return@post
+        }
+        val sentToUser = users.findOne(User::username eq sentToUsername)
+        if(sentToUser == null) {
+            call.respond(BadRequest, "No user with this username exists")
+            return@post
+        }
+        val modifiedSentRequests = user.sentFriends.toMutableList()
+        val modifiedReceivedRequests = sentToUser.receivedFriends.toMutableList()
+        val senderReceivedRequests = user.receivedFriends.toMutableList()
+        if(sentToUsername in senderReceivedRequests) {
+            call.respond(OK, BasicApiResponse(false, "This user already sent you a friend request"))
+            return@post
+        }
+        if(sentToUsername in modifiedSentRequests) {
+            call.respond(OK, BasicApiResponse(false, "You can not send a friend request twice"))
+            return@post
+        }
+        if(sentToUsername in user.friends) {
+            call.respond(OK, BasicApiResponse(false, "You are already friends with $sentToUsername"))
+            return@post
+        }
+        if(sentToUsername == username) {
+            call.respond(BasicApiResponse(false, "You can't send a friend request to yourself"))
+            return@post
+        }
+        modifiedSentRequests.add(sentToUsername)
+        modifiedReceivedRequests.add(username!!)
+        users.replaceOneById(user.userId, user.copy(sentFriends = modifiedSentRequests.toList()))
+        users.replaceOneById(sentToUser.userId, sentToUser.copy(receivedFriends = modifiedReceivedRequests.toList()))
+
+        call.respond(OK, BasicApiResponse(true, "You have sent a friend request to $sentToUsername"))
+    }
+}
+
+fun Route.cancelFriendRequest() {
+    post("/cancelFriendRequest") {
+        val session = call.sessions.get<ChatSession>()
+        val username = session?.username
+        val sentToUsername = call.parameters["sentToUsername"]
+        if(session == null) {
+            call.respond(BadRequest, "No session")
+            return@post
+        }
+        if(sentToUsername == null) {
+            call.respond(BadRequest, "No user with this username exists")
+            return@post
+        }
+        val user = users.findOne(User::username eq username)
+        val sentToUser = users.findOne(User::username eq sentToUsername)
+        if(user == null) {
+            call.respond(BadRequest, "No user with this username exists")
+            return@post
+        }
+        if(sentToUser == null) {
+            call.respond(BadRequest, "No user with this username exists")
+            return@post
+        }
+        val userSentRequests = user.sentFriends.toMutableList()
+        val sentToUserReceivedRequests = sentToUser.receivedFriends.toMutableList()
+        userSentRequests.remove(sentToUsername)
+        sentToUserReceivedRequests.remove(username!!)
+        users.replaceOneById(user.userId, user.copy(sentFriends = userSentRequests))
+        users.replaceOneById(sentToUser.userId, sentToUser.copy(receivedFriends = sentToUserReceivedRequests))
+
+        call.respond(OK, BasicApiResponse(true, "Friend request canceled"))
+    }
+}
+
+fun Route.refuseFriendRequest() {
+    post("/refuseFriendRequest") {
+        val session = call.sessions.get<ChatSession>()
+        val username = session?.username
+        val senderUsername = call.parameters["senderUsername"]
+        if(session == null) {
+            call.respond(BadRequest, "No session")
+            return@post
+        }
+        if(senderUsername == null) {
+            call.respond(BadRequest, "No user with this username exists")
+            return@post
+        }
+        val user = users.findOne(User::username eq username)
+        val senderUser = users.findOne(User::username eq senderUsername)
+        if(user == null) {
+            call.respond(BadRequest, "No user with this username exists")
+            return@post
+        }
+        if(senderUser == null) {
+            call.respond(BadRequest, "No user with this username exists")
+            return@post
+        }
+        val userReceivedRequests = user.receivedFriends.toMutableList()
+        val senderUserSentRequests = senderUser.sentFriends.toMutableList()
+        userReceivedRequests.remove(senderUsername)
+        senderUserSentRequests.remove(username!!)
+        users.replaceOneById(user.userId, user.copy(receivedFriends = userReceivedRequests.toList()))
+        users.replaceOneById(senderUser.userId, senderUser.copy(sentFriends = senderUserSentRequests.toList()))
+
+        call.respond(OK, BasicApiResponse(true, "Friend request refused"))
+    }
+}
+
+fun Route.acceptFriendRequest() {
+    post("/acceptFriendRequest") {
+        val session = call.sessions.get<ChatSession>()
+        val username = session?.username
+        val senderUsername = call.parameters["senderUsername"]
+        if(session == null) {
+            call.respond(BadRequest, "No session")
+            return@post
+        }
+        if(senderUsername == null) {
+            call.respond(BadRequest, "No user with this username exists")
+            return@post
+        }
+        val user = users.findOne(User::username eq username)
+        val senderUser = users.findOne(User::username eq senderUsername)
+        if(user == null) {
+            call.respond(BadRequest, "No user with this username exists")
+            return@post
+        }
+        if(senderUser == null) {
+            call.respond(BadRequest, "No user with this username exists")
+            return@post
+        }
+        val userReceivedRequests = user.receivedFriends.toMutableList()
+        val senderUserSentRequests = senderUser.sentFriends.toMutableList()
+        val userFriendList = user.friends.toMutableList()
+        val senderFriendList = senderUser.friends.toMutableList()
+        userReceivedRequests.remove(senderUsername)
+        userFriendList.add(senderUsername)
+        senderFriendList.add(username!!)
+        senderUserSentRequests.remove(username)
+        users.replaceOneById(
+            user.userId,
+            user.copy(receivedFriends = userReceivedRequests.toList(), friends = userFriendList.toList())
+        )
+        users.replaceOneById(
+            senderUser.userId,
+            senderUser.copy(sentFriends = senderUserSentRequests.toList(), friends = senderFriendList.toList())
+        )
+
+        call.respond(OK, BasicApiResponse(true, "Friend request accepted"))
     }
 }
