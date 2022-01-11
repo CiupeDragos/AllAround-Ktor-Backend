@@ -4,10 +4,8 @@ package com.example.data
 import com.example.data.models.*
 import com.example.securityutil.checkHashForPassword
 import com.example.securityutil.getHashWithSalt
-import com.example.server.findChat
-import com.example.server.getAllRecentChatsForUser
-import com.example.server.insertChatMessageToChat
-import com.example.server.onlineNotChattingUsers
+import com.example.server.*
+import com.example.util.Constants.CHAT_DEBUGGING
 import com.example.util.Constants.MAX_CHAT_GROUP_NAME_LENGTH
 import com.example.util.Constants.MAX_PASSWORD_LENGTH
 import com.example.util.Constants.MAX_USERNAME_LENGTH
@@ -92,11 +90,12 @@ suspend fun validateAndCreateChatGroup(username: String, name: String, members: 
 }
 
 suspend fun saveNormalChatMessage(message: NormalChatMessage) {
-    val chat = findChat(message.sender, message.receiver) ?: return
-    val messageToInsert = message.copy(messageId = ObjectId().toString())
+    createChat(message.sender, message.receiver)
+    val chat = findChat(message.sender, message.receiver)!!
+    val messageToInsert = message.copy(messageId = ObjectId().toString(), timestamp = System.currentTimeMillis())
     normalChatMessages.insertOne(messageToInsert)
     insertChatMessageToChat(chat, messageToInsert)
-
+    println("$CHAT_DEBUGGING: Chat message saved")
 }
 
 suspend fun saveChatGroupMessage(message: ChatGroupMessage) {

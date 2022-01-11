@@ -17,5 +17,6 @@ fun Application.configureRouting() {
         cancelFriendRequest()
         refuseFriendRequest()
         acceptFriendRequest()
+        upload()
     }
 }

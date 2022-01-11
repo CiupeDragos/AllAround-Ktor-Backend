@@ -13,15 +13,18 @@ import com.example.util.Constants.MIN_CHAT_GROUP_NAME_LENGTH
 import com.example.util.Constants.NO_GROUP_ID
 import io.ktor.application.*
 import io.ktor.http.*
+import io.ktor.http.ContentDisposition.Companion.File
 import io.ktor.http.HttpStatusCode.Companion.BadRequest
 import io.ktor.http.HttpStatusCode.Companion.Conflict
 import io.ktor.http.HttpStatusCode.Companion.NoContent
 import io.ktor.http.HttpStatusCode.Companion.OK
+import io.ktor.http.content.*
 import io.ktor.request.*
 import io.ktor.response.*
 import io.ktor.routing.*
 import io.ktor.sessions.*
 import org.litote.kmongo.eq
+import java.io.File
 import java.security.BasicPermission
 
 fun Route.registerRoute() {
@@ -336,5 +339,34 @@ fun Route.acceptFriendRequest() {
         )
 
         call.respond(OK, BasicApiResponse(true, "Friend request accepted"))
+    }
+}
+
+//Testing image uploading
+
+fun Route.upload() {
+    post("/uploadImage") {
+        val multipartData = try {
+            call.receiveMultipart()
+        } catch (e: Exception) {
+            call.respond(BadRequest, "Bad request")
+            return@post
+        }
+        var userId = ""
+
+        multipartData.forEachPart { part ->
+            when(part) {
+                is PartData.FormItem -> {
+                    userId = part.value
+                    println(userId)
+                }
+                is PartData.FileItem -> {
+                    val fileName = part.originalFileName as String
+                    val fileBytes = part.streamProvider().readBytes()
+                    File("uploads/$fileName.jpg").writeBytes(fileBytes)
+                    call.respond(OK, BasicApiResponse(true,"Image uploaded successfully"))
+                }
+            }
+        }
     }
 }

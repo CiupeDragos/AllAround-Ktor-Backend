@@ -3,6 +3,7 @@ package com.example.server
 import com.example.data.*
 import com.example.data.models.*
 import com.example.responses.*
+import com.example.util.Constants
 import com.google.gson.Gson
 import io.ktor.http.cio.websocket.*
 import org.bson.types.ObjectId
@@ -45,17 +46,17 @@ suspend fun tryDisconnectChattingUsers(username: String) {
     }
 }
 
-suspend fun addNormalChatUser(username: String, socket: WebSocketSession, chatPartner: String): Boolean {
+fun addNormalChatUser(username: String, socket: WebSocketSession, chatPartner: String): Boolean {
     if (onlineChatUsers.containsKey(username)) {
         return false
     }
-    createChat(username, chatPartner)
 
     val chatUser = NormalChatUser(
         username = username,
         socket = socket,
         chatPartner = chatPartner
     )
+
     onlineChatUsers[username] = chatUser
     return true
 }
@@ -173,6 +174,8 @@ suspend fun createChat(participant1: String, participant2: String) {
         chatId = ObjectId().toString()
     )
     chats.insertOne(newChat)
+    addLastReadTimestampForChat(participant2, participant1)
+    println("${Constants.CHAT_DEBUGGING}: Chat created, timestamps added")
 }
 
 suspend fun findChat(participant1: String, participant2: String): NormalChat? {
@@ -189,7 +192,7 @@ suspend fun insertChatMessageToChat(chat: NormalChat, message: NormalChatMessage
 }
 
 suspend fun getAllChatMessages(participant1: String, participant2: String): String {
-    val chat = findChat(participant1, participant2)!!
+    val chat = findChat(participant1, participant2) ?: return gson.toJson(MessagesForThisChat(listOf()))
     val messagesById = chat.messages
     val messagesAsNormalMessages = messagesById.map { messageId ->
         normalChatMessages.findOneById(messageId)!!
@@ -293,8 +296,11 @@ suspend fun getAllRecentChatsForUser(username: String): String {
     return gson.toJson(messagesToSendAsRecent)
 }
 
-fun disconnectUnchattingUser(username: String) {
+suspend fun disconnectUnchattingUser(username: String) {
     if(onlineNotChattingUsers.containsKey(username)) {
         onlineNotChattingUsers.remove(username)
+    } else if (onlineChatUsers.containsKey(username)) {
+        addLastReadTimestampForChat(username, onlineChatUsers[username]!!.chatPartner)
+        onlineChatUsers.remove(username)
     }
 }
